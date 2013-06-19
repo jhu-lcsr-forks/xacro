@@ -203,35 +203,42 @@ def process_includes(doc, base_dir):
     while elt:
         if elt.tagName == 'include' or elt.tagName == 'xacro:include':
             filename = eval_text(elt.getAttribute('filename'), {})
+            once = eval_text(elt.getAttribute('once'), {}).lower() == 'true';
             if not os.path.isabs(filename):
                 filename = os.path.join(base_dir, filename)
-            f = None
-            try:
-                try:
-                    f = open(filename)
-                except IOError, e:
-                    print(elt)
-                    raise XacroException("included file \"%s\" could not be opened: %s" % (filename, str(e)))
-                try:
-                    global all_includes
-                    all_includes.append(filename)
-                    included = parse(f)
-                except Exception, e:
-                    raise XacroException("included file [%s] generated an error during XML parsing: %s" % (filename, str(e)))
-            finally:
-                if f:
-                    f.close()
 
-            # Replaces the include tag with the elements of the included file
-            for c in child_elements(included.documentElement):
-                elt.parentNode.insertBefore(c.cloneNode(1), elt)
+            # Check for inclusion guard
+            if not (once and filename in all_includes):
+                f = None
+                try:
+                    try:
+                        f = open(filename)
+                    except IOError, e:
+                        print(elt)
+                        raise XacroException("included file \"%s\" could not be opened: %s" % (filename, str(e)))
+                    try:
+                        global all_includes
+                        all_includes.append(filename)
+                        included = parse(f)
+                    except Exception, e:
+                        raise XacroException("included file [%s] generated an error during XML parsing: %s" % (filename, str(e)))
+                finally:
+                    if f:
+                        f.close()
+
+                # Replaces the include tag with the elements of the included file
+                for c in child_elements(included.documentElement):
+                    elt.parentNode.insertBefore(c.cloneNode(1), elt)
+
+                # Grabs all the declared namespaces of the included document
+                for name, value in included.documentElement.attributes.items():
+                    if name.startswith('xmlns:'):
+                        namespaces[name] = value
+
+            # Remove the element
             elt.parentNode.removeChild(elt)
             elt = None
 
-            # Grabs all the declared namespaces of the included document
-            for name, value in included.documentElement.attributes.items():
-                if name.startswith('xmlns:'):
-                    namespaces[name] = value
         else:
             previous = elt
 
